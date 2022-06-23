@@ -28,30 +28,38 @@ std::vector<int> cactusesi;
 
 int convert(int num){ num++; if (num==1 || num == 3) return 1; else if (num==2 || num == 4) return 2; return 3;  }
 
+std::map<int, RSGL::point> memory; int lastDis; int distObj;
+bool AI(){
+      if (memory.find(distObj) == memory.end()) memory.insert({distObj,{0,0}});
+      lastDis=distObj;
+      return memory.at(distObj).y > memory.at(distObj).x;
+}
+
 int main(){
       srand(time(NULL));
       std::vector<RSGL::rect> dots;
       std::vector<RSGL::rect> clouds;
       int tick=-1,scoreTick=0, switchTick=0, speed=3, dinoY=0;
       int highScore=0; int score=0; 
-      bool dead=false; bool jump=false, fall=false, duck=false, init=false; 
+      bool dead=false; bool jump=false, fall=false, duck=false, init=false, AIMode=false;  int restartFrame=0;
       
       for (int y=0; y < 2; y++){
             for (int x=(!y); x < 3; x++) Cactuses.insert(Cactuses.end(), { win.r.width+80,  (20*(y-1))+(win.r.width/2-20),  20*(y+1), 45 });
       } Cactuses.insert(Cactuses.end(),{win.r.width+80,(win.r.width/2+20),20,25});
 
       if (readFile("highScore") != "") highScore=std::stoi(readFile("highScore")); 
-      std::string dinoImg="res/images/dinoidle.png";
+      std::string dinoImg="res/images/lonicidle.png";
 
       while(running){
             win.checkEvents();
+            if (!cactuses.empty()) distObj=cactuses.at(0).x-40;
+            if (AIMode && dead && restartFrame >= 200){ restartFrame=0; dead=false; cactuses={};tick=-1; score=0; dinoY=0; speed=3;}
             switch(win.event.type){
                  case RSGL::quit: running=false; break;
-                 case RSGL::KeyReleased: if (!init) {init=true; dinoImg="res/images/dinowalk1.png"; } 
-                        if (win.event.key == "space" || win.event.key == "Up" && !jump){ 
-                              jump=true; 
-                              if (dead){ dead=false; cactuses={};tick=-1; score=0; dinoY=0; speed=3;}
-                        }
+                 case RSGL::KeyReleased: if (!init && (win.event.key != "Meta_L" && win.event.key != "Meta_R" )) { restartFrame=0;  init=true; dinoImg="res/images/lonicwalk1.png"; } 
+                        if (dead && (win.event.key != "Meta_L" && win.event.key != "Meta_R")) { init=false; dead=false; cactuses={};tick=-1; score=0; dinoY=0; speed=3;}
+                        if ( !AIMode && (win.event.key == "space" || win.event.key == "Up") || (AIMode && AI(/*data*/) )) jump=true; 
+                        if (win.event.key == "Meta_L" ||win.event.key == "Meta_R") AIMode=!AIMode; break;
                  default: break;
             }
             RSGL::drawRect({0,win.r.length/2,win.r.width,1},{0,0,0});
@@ -89,14 +97,16 @@ int main(){
                         if (jump && !fall){ dinoY+=4; if (dinoY==112) fall=true; } 
                         if (!dinoY && fall){ jump=false; fall=false;}
                         duck = win.isPressed("Down");
-                        if (cactuses.size() > 3) cactuses = {cactuses.at(0)};
+                        for (int y=0; y < cactuses.size(); y++){
+                              for (int x=0; x < cactuses.size(); x++) if ( x != y && (RSGL::RectCollideRect(cactuses.at(x),cactuses.at(y)) || abs(abs(cactuses.at(x).x)-abs(cactuses.at(y).x)) < 100)) cactuses.erase(cactuses.begin()+x);
+                        }
                         if (cactuses.empty() || (!cactuses.empty() && cactuses.at(0).x < 40)){ int r=rand() % (Cactuses.size()-1);
                               cactuses.insert(cactuses.end(), Cactuses.at(r));
                               cactusesi.insert(cactusesi.end(), r);
                         }
                   }
             } else if (dead){
-                  dinoImg="res/images/dinodead.png";
+                  dinoImg="res/images/lonicdead.png";
                   RSGL::drawText("G a m e  O v e r",{win.r.width/5,win.r.length/3,20},"res/fonts/PublicPixel.ttf", {0,0,0} );
                   RSGL::drawImage("res/images/restart.png",{win.r.width/2,win.r.length/3+30,30,30});
                   if (RSGL::RectCollidePoint({win.r.width/2,win.r.length/3+30,30,30},{win.event.mouse}) && win.event.type == RSGL::MouseButtonReleased){ dead=false; cactuses={};tick=-1; score=0; dinoY=0; speed=3;}
@@ -104,17 +114,23 @@ int main(){
             for (int i=0; i < cactuses.size() && init; i++){ 
                   if (!dead) cactuses.at(i).x-=speed;
                   if (cactuses.at(i).x < -40) cactuses.erase(cactuses.begin() + i);
-                  if (RSGL::RectCollideRect(cactuses.at(i),{20, (20*duck)+(win.r.width/2-20)-dinoY,20,45/(duck+1)})) dead=true;
+                  if (RSGL::RectCollideRect(cactuses.at(i),{20, (20*duck)+(win.r.width/2-20)-dinoY,20,45/(duck+1)})){ 
+                        dead=true;
+                        if (AIMode) memory.at(lastDis).x--;
+                  }
                   if (cactusesi.at(i) == Cactuses.size()-1) RSGL::drawImage("bird.png",cactuses.at(i) );
                   else RSGL::drawImage("res/images/cactus"+std::to_string(convert(cactusesi.at(i))) + ".png",cactuses.at(i) );
                   //RSGL::drawRect(cactuses.at(i),{0,0,0});
             }
             if (switchTick == 6 && init){
-                if (!duck && !dead) dinoImg == "res/images/dinowalk1.png" ? dinoImg="res/images/dinowalk2.png" : dinoImg="res/images/dinowalk1.png";
-                if (duck && !dead) dinoImg == "res/images/dinoduck1.png" ? dinoImg="res/images/dinoduck2.png" : dinoImg="res/images/dinoduck1.png";
+                if (!duck && !dead) dinoImg == "res/images/lonicwalk1.png" ? dinoImg="res/images/lonicwalk2.png" : dinoImg="res/images/lonicwalk1.png";
+                if (duck && !dead) dinoImg == "res/images/lonicduck1.png" ? dinoImg="res/images/lonicduck2.png" : dinoImg="res/images/lonicduck1.png";
                 switchTick=0;
             }
             RSGL::drawImage(dinoImg,{15, (20*duck)+(win.r.width/2-20)-dinoY,25,45/(duck+1)});
-            win.clear();  tick++; scoreTick++; if (init) switchTick++;
+            std::string biases="";
+            if (memory.find(AIMode) != memory.end()) biases = "\nJLazy Bias "+std::to_string(memory.at(AIMode).x)+"\nJump Bias "+std::to_string(memory.at(AIMode).y);
+            RSGL::drawText("AI : " + std::to_string(AIMode) + "\nDist "+std::to_string(distObj) + biases,{400,400,15},"res/fonts/PublicPixel.ttf", {0,0,0} );
+            win.clear();  tick++; scoreTick++; if (init) switchTick++; restartFrame++;
       } win.close(); 
 }
